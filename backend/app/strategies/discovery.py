@@ -93,6 +93,8 @@ def discover_strategies(
 
         for plugin_class in plugin_classes:
             try:
+                if inspect.isabstract(plugin_class):
+                    raise TypeError("plugin class must implement all abstract strategy methods")
                 _validate_plugin_class(plugin_class)
                 discovered.append((plugin_path, plugin_class.to_metadata()))
             except Exception as exc:  # noqa: BLE001

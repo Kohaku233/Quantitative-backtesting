@@ -133,6 +133,20 @@ class InvalidContractStrategy(BaseStrategyPlugin):
 """
 
 
+ABSTRACT_PLUGIN = """
+from backend.app.strategies.base import BaseStrategyPlugin
+
+
+class AbstractMetadataOnlyStrategy(BaseStrategyPlugin):
+    id = "abstract_strategy"
+    name = "Abstract Strategy"
+    description = "Metadata only; abstract methods not implemented."
+    supported_timeframes = ("1h",)
+    required_lookback_bars = 20
+    parameter_schema = []
+"""
+
+
 def _write_plugin(path: Path, content: str) -> None:
     path.write_text(dedent(content).strip() + "\n", encoding="utf-8")
 
@@ -142,6 +156,7 @@ def test_discovery_skips_invalid_plugins_and_returns_warnings(tmp_path: Path) ->
     _write_plugin(tmp_path / "broken_plugin.py", BROKEN_PLUGIN)
     _write_plugin(tmp_path / "duplicate_sma_cross.py", DUPLICATE_PLUGIN)
     _write_plugin(tmp_path / "invalid_contract.py", INVALID_CONTRACT_PLUGIN)
+    _write_plugin(tmp_path / "abstract_plugin.py", ABSTRACT_PLUGIN)
 
     strategies, warnings = discover_strategies(tmp_path)
 
@@ -163,3 +178,14 @@ def test_discovery_skips_invalid_plugins_and_returns_warnings(tmp_path: Path) ->
         "file": "invalid_contract.py",
         "reason": "TypeError: validate_params must be declared as a @classmethod",
     } in warning_dicts
+    assert {
+        "file": "abstract_plugin.py",
+        "reason": "TypeError: plugin class must implement all abstract strategy methods",
+    } in warning_dicts
+
+
+def test_discovery_finds_real_shipped_strategy() -> None:
+    strategies, warnings = discover_strategies(Path("backend/strategies"))
+
+    assert [strategy.id for strategy in strategies] == ["sma_cross"]
+    assert warnings == []
