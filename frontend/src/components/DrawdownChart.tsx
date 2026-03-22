@@ -8,6 +8,7 @@ import {
   type ISeriesApi,
 } from "lightweight-charts";
 
+import { toChartTimestamp } from "../lib/chartTime";
 import { formatCompactNumber, formatPercent, formatTimestamp } from "../lib/formatters";
 
 export type DrawdownPoint = {
@@ -161,7 +162,12 @@ export function DrawdownChart({
 
     chartRef.current = chart;
     seriesRef.current = series;
-    series.setData(data);
+    series.setData(
+      data.map((point) => ({
+        time: toChartTimestamp(point.time),
+        value: point.drawdown,
+      })),
+    );
     chart.timeScale().fitContent();
 
     const resize = () => {

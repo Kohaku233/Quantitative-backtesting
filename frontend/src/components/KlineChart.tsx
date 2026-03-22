@@ -8,8 +8,10 @@ import {
   type IChartApi,
   type ISeriesApi,
   type SeriesMarker,
+  type UTCTimestamp,
 } from "lightweight-charts";
 
+import { toChartTimestamp } from "../lib/chartTime";
 import { formatCompactNumber, formatNumber, formatTimestamp } from "../lib/formatters";
 
 export type KlinePoint = {
@@ -59,13 +61,13 @@ function resolveTheme(theme?: ChartTheme): ChartTheme {
   return "light";
 }
 
-function mapMarker(marker: KlineMarker): SeriesMarker<string> {
+function mapMarker(marker: KlineMarker): SeriesMarker<UTCTimestamp> {
   const action = marker.action.toLowerCase();
   const isEntry = action.includes("entry");
   const isExit = action.includes("exit");
 
   return {
-    time: marker.time,
+    time: toChartTimestamp(marker.time),
     position: isEntry ? "belowBar" : "aboveBar",
     shape: isEntry ? "arrowUp" : isExit ? "arrowDown" : "circle",
     color: isEntry ? "#2f855a" : isExit ? "#c53030" : "#4a5568",
@@ -207,7 +209,15 @@ export function KlineChart({
 
     chartRef.current = chart;
     seriesRef.current = series;
-    series.setData(data);
+    series.setData(
+      data.map((point) => ({
+        time: toChartTimestamp(point.time),
+        open: point.open,
+        high: point.high,
+        low: point.low,
+        close: point.close,
+      })),
+    );
     markersRef.current?.detach();
     markersRef.current = createSeriesMarkers(series, markers.map(mapMarker), {
       autoScale: true,

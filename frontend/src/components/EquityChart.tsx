@@ -8,6 +8,7 @@ import {
   type ISeriesApi,
 } from "lightweight-charts";
 
+import { toChartTimestamp } from "../lib/chartTime";
 import { formatCompactNumber, formatNumber, formatTimestamp } from "../lib/formatters";
 
 export type EquityPoint = {
@@ -162,7 +163,12 @@ export function EquityChart({
 
     chartRef.current = chart;
     seriesRef.current = series;
-    series.setData(data);
+    series.setData(
+      data.map((point) => ({
+        time: toChartTimestamp(point.time),
+        value: point.equity,
+      })),
+    );
     chart.timeScale().fitContent();
 
     const resize = () => {

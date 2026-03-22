@@ -26,6 +26,18 @@ import "./styles.css";
 type Theme = "light" | "dark";
 type Timeframe = "15m" | "1h" | "4h" | "1d";
 type ParameterValue = string | number | boolean;
+type BacktestSignature = {
+  strategyId: string;
+  timeframe: Timeframe;
+  start: string;
+  end: string;
+  initialCapital: number;
+  leverage: number;
+  feeBps: number;
+  slippageBps: number;
+  positionSizePct: number;
+  paramsKey: string;
+};
 
 const FIXED_SYMBOL = "BTCUSDT";
 const DEFAULT_TIMEFRAME: Timeframe = "1h";
@@ -99,6 +111,12 @@ function normalizeParameterValue(field: StrategyParameterField, value: Parameter
   }
 
   return String(value);
+}
+
+function serializeParameterValues(values: Record<string, ParameterValue>): string {
+  return JSON.stringify(
+    Object.entries(values).sort(([leftKey], [rightKey]) => leftKey.localeCompare(rightKey)),
+  );
 }
 
 function formatNullableMetric(
@@ -194,6 +212,7 @@ export default function App() {
   const [slippageBps, setSlippageBps] = useState(DEFAULT_FORM.slippageBps);
   const [positionSizePct, setPositionSizePct] = useState(DEFAULT_FORM.positionSizePct);
   const [parameterValues, setParameterValues] = useState<Record<string, ParameterValue>>({});
+  const [lastRunSignature, setLastRunSignature] = useState<BacktestSignature | null>(null);
 
   const {
     strategies,
@@ -264,10 +283,52 @@ export default function App() {
     error: runError,
     runBacktest,
   } = useRunBacktest();
-  const deferredResult = useDeferredValue(result);
+  const currentParamsKey = useMemo(
+    () => serializeParameterValues(parameterValues),
+    [parameterValues],
+  );
+  const activeResult = useMemo(() => {
+    if (!result || !coverageRequest || !selectedStrategy || !lastRunSignature) {
+      return null;
+    }
+
+    if (
+      lastRunSignature.strategyId !== selectedStrategy.id ||
+      lastRunSignature.strategyId !== result.strategy.id ||
+      lastRunSignature.timeframe !== timeframe ||
+      lastRunSignature.start !== startValue ||
+      lastRunSignature.end !== endValue ||
+      lastRunSignature.initialCapital !== initialCapital ||
+      lastRunSignature.leverage !== leverage ||
+      lastRunSignature.feeBps !== feeBps ||
+      lastRunSignature.slippageBps !== slippageBps ||
+      lastRunSignature.positionSizePct !== positionSizePct ||
+      lastRunSignature.paramsKey !== currentParamsKey
+    ) {
+      return null;
+    }
+
+    return result;
+  }, [
+    coverageRequest,
+    feeBps,
+    initialCapital,
+    leverage,
+    positionSizePct,
+    currentParamsKey,
+    result,
+    selectedStrategy,
+    startValue,
+    slippageBps,
+    timeframe,
+    endValue,
+    lastRunSignature,
+  ]);
+  const deferredResult = useDeferredValue(activeResult);
+  const visibleResult = activeResult === null ? null : deferredResult;
 
   const effectiveCoverage =
-    getCoverageFromDetails(runError?.details) ?? deferredResult?.coverage ?? coverage;
+    getCoverageFromDetails(runError?.details) ?? visibleResult?.coverage ?? coverage;
   const canRun = Boolean(coverage?.complete && !isSyncing && !isRunning && selectedStrategy);
   const showSyncButton = Boolean(selectedStrategy) && !isCoverageLoading;
 
@@ -344,11 +405,11 @@ export default function App() {
       };
     }
 
-    if (deferredResult) {
+    if (visibleResult) {
       return {
         tone: "success" as const,
         title: "Rendering result",
-        description: `${deferredResult.strategy.name} completed ${deferredResult.metrics.total_trades} trades between ${formatTimestamp(deferredResult.run.effective_start)} and ${formatTimestamp(deferredResult.run.actual_end)}.`,
+        description: `${visibleResult.strategy.name} completed ${visibleResult.metrics.total_trades} trades between ${formatTimestamp(visibleResult.run.effective_start)} and ${formatTimestamp(visibleResult.run.actual_end)}.`,
       };
     }
 
@@ -385,9 +446,10 @@ export default function App() {
     selectedStrategy,
     strategiesError,
     syncResult,
+    visibleResult,
   ]);
 
-  const metrics = useMemo(() => (deferredResult ? getMetricItems(deferredResult) : []), [deferredResult]);
+  const metrics = useMemo(() => (visibleResult ? getMetricItems(visibleResult) : []), [visibleResult]);
 
   const handleThemeToggle = () => {
     setTheme((current) => (current === "dark" ? "light" : "dark"));
@@ -420,6 +482,21 @@ export default function App() {
     if (!selectedStrategy || !coverageRequest || !coverage?.complete || isRunning) {
       return;
     }
+
+    const signature: BacktestSignature = {
+      strategyId: selectedStrategy.id,
+      timeframe,
+      start: startValue,
+      end: endValue,
+      initialCapital,
+      leverage,
+      feeBps,
+      slippageBps,
+      positionSizePct,
+      paramsKey: currentParamsKey,
+    };
+
+    setLastRunSignature(signature);
 
     try {
       await runBacktest({
@@ -496,7 +573,7 @@ export default function App() {
               description={phaseBanner.description}
             />
 
-            {!deferredResult ? (
+            {!visibleResult ? (
               <EmptyState
                 eyebrow="Research Terminal"
                 title="No backtest result yet"
@@ -508,10 +585,10 @@ export default function App() {
 
                 <div className="results-grid">
                   <KlineChart
-                    data={deferredResult.series.market_bars}
-                    markers={deferredResult.markers}
+                    data={visibleResult.series.market_bars}
+                    markers={visibleResult.markers}
                     title="BTCUSDT perpetual"
-                    subtitle={`${deferredResult.run.timeframe} candles with execution markers`}
+                    subtitle={`${visibleResult.run.timeframe} candles with execution markers`}
                     theme={theme}
                   />
 
@@ -525,10 +602,10 @@ export default function App() {
                     </div>
 
                     <div className="signal-feed__list">
-                      {deferredResult.markers.length === 0 ? (
+                      {visibleResult.markers.length === 0 ? (
                         <p className="signal-feed__empty">No marker annotations were produced for this run.</p>
                       ) : (
-                        deferredResult.markers.map((marker) => (
+                        visibleResult.markers.map((marker) => (
                           <article key={`${marker.trade_id}-${marker.time}`} className="signal-chip">
                             <strong>{marker.action}</strong>
                             <span>Trade #{marker.trade_id}</span>
@@ -543,20 +620,20 @@ export default function App() {
 
                 <div className="secondary-grid">
                   <EquityChart
-                    data={deferredResult.series.equity_curve}
-                    subtitle={`${deferredResult.run.status} run with ${deferredResult.metrics.total_trades} closed trades`}
+                    data={visibleResult.series.equity_curve}
+                    subtitle={`${visibleResult.run.status} run with ${visibleResult.metrics.total_trades} closed trades`}
                     theme={theme}
                   />
                   <DrawdownChart
-                    data={deferredResult.series.drawdown_curve}
+                    data={visibleResult.series.drawdown_curve}
                     subtitle="Peak-to-trough equity stress across the selected range"
                     theme={theme}
                   />
                 </div>
 
                 <div className="secondary-grid secondary-grid--tables">
-                  <TradesTable trades={deferredResult.trades} />
-                  <MonthlyReturnsTable monthlyReturns={deferredResult.monthly_returns} />
+                  <TradesTable trades={visibleResult.trades} />
+                  <MonthlyReturnsTable monthlyReturns={visibleResult.monthly_returns} />
                 </div>
               </>
             )}
