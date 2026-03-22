@@ -125,3 +125,34 @@ def discover_strategies(
 
     strategies.sort(key=lambda strategy: strategy.id)
     return strategies, warnings
+
+
+def discover_strategy_registry(
+    directory: Path,
+) -> tuple[dict[str, type[BaseStrategyPlugin]], dict[str, StrategyMetadata], list[DiscoveryWarning]]:
+    strategies, warnings = discover_strategies(directory)
+    plugin_map: dict[str, type[BaseStrategyPlugin]] = {}
+    metadata_map = {strategy.id: strategy for strategy in strategies}
+
+    for plugin_path in sorted(directory.glob("*.py")):
+        if plugin_path.name == "__init__.py":
+            continue
+
+        try:
+            module = _load_module(plugin_path)
+        except Exception:  # noqa: BLE001
+            continue
+
+        plugin_classes = [
+            member
+            for _, member in inspect.getmembers(module, inspect.isclass)
+            if issubclass(member, BaseStrategyPlugin) and member is not BaseStrategyPlugin
+        ]
+
+        for plugin_class in plugin_classes:
+            if inspect.isabstract(plugin_class):
+                continue
+            if plugin_class.id in metadata_map:
+                plugin_map[plugin_class.id] = plugin_class
+
+    return plugin_map, metadata_map, warnings

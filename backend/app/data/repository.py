@@ -1,8 +1,9 @@
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
 import duckdb
+import pandas as pd
 
 from backend.app.data.coverage import (
     coerce_utc_datetime,
@@ -232,3 +233,72 @@ class DuckDbRepository:
                 missing_ranges=missing_funding,
             ),
         )
+
+    def load_klines(
+        self,
+        *,
+        symbol: str,
+        timeframe: str,
+        start: datetime,
+        end: datetime,
+    ) -> pd.DataFrame:
+        normalized_start = coerce_utc_datetime(start).replace(tzinfo=None)
+        normalized_end = coerce_utc_datetime(end).replace(tzinfo=None)
+        with self._connect() as connection:
+            frame = connection.execute(
+                """
+                SELECT open_time, close_time, open, high, low, close, volume
+                FROM klines
+                WHERE symbol = ?
+                  AND timeframe = ?
+                  AND open_time BETWEEN ? AND ?
+                ORDER BY open_time
+                """,
+                [symbol, timeframe, normalized_start, normalized_end],
+            ).fetchdf()
+
+        if frame.empty:
+            empty = pd.DataFrame(
+                columns=["close_time", "open", "high", "low", "close", "volume"],
+                index=pd.DatetimeIndex([], tz=UTC, name="open_time"),
+            )
+            empty["close_time"] = pd.to_datetime(empty["close_time"], utc=True)
+            return empty
+
+        frame["open_time"] = pd.to_datetime(frame["open_time"], utc=True)
+        frame["close_time"] = pd.to_datetime(frame["close_time"], utc=True)
+        frame = frame.set_index("open_time")
+        frame.index.name = "open_time"
+        return frame
+
+    def load_funding_rates(
+        self,
+        *,
+        symbol: str,
+        start: datetime,
+        end: datetime,
+    ) -> pd.DataFrame:
+        normalized_start = coerce_utc_datetime(start).replace(tzinfo=None)
+        normalized_end = coerce_utc_datetime(end).replace(tzinfo=None)
+        with self._connect() as connection:
+            frame = connection.execute(
+                """
+                SELECT funding_time, funding_rate
+                FROM funding_rates
+                WHERE symbol = ?
+                  AND funding_time BETWEEN ? AND ?
+                ORDER BY funding_time
+                """,
+                [symbol, normalized_start, normalized_end],
+            ).fetchdf()
+
+        if frame.empty:
+            return pd.DataFrame(
+                columns=["funding_rate"],
+                index=pd.DatetimeIndex([], tz=UTC, name="funding_time"),
+            )
+
+        frame["funding_time"] = pd.to_datetime(frame["funding_time"], utc=True)
+        frame = frame.set_index("funding_time")
+        frame.index.name = "funding_time"
+        return frame
