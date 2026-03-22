@@ -41,6 +41,38 @@ class PagingBinanceClient(BinancePublicClient):
         return []
 
 
+class OffsetFundingBinanceClient(BinancePublicClient):
+    async def _request_json(self, path: str, params: dict[str, int | str]):
+        if path != "/fapi/v1/fundingRate":
+            return []
+        return [
+            {
+                "fundingTime": _ms("2024-01-12T00:00:00Z") + 1,
+                "fundingRate": "0.0001",
+            }
+        ]
+
+
+class OffsetFundingWindowBinanceClient(BinancePublicClient):
+    def __init__(self) -> None:
+        super().__init__()
+        self.calls: list[dict[str, int | str]] = []
+
+    async def _request_json(self, path: str, params: dict[str, int | str]):
+        self.calls.append(params)
+        if path != "/fapi/v1/fundingRate":
+            return []
+
+        if int(params["endTime"]) >= _ms("2024-01-12T00:00:00Z") + 1:
+            return [
+                {
+                    "fundingTime": _ms("2024-01-12T00:00:00Z") + 1,
+                    "fundingRate": "0.0001",
+                }
+            ]
+        return []
+
+
 def test_fetch_klines_paginates_until_end() -> None:
     client = PagingBinanceClient()
 
@@ -81,3 +113,33 @@ def test_fetch_funding_rates_paginates_until_end() -> None:
         "2024-01-01T16:00:00Z",
     ]
     assert len(client.funding_calls) == 3
+
+
+def test_fetch_funding_rates_normalizes_exchange_millisecond_drift() -> None:
+    client = OffsetFundingBinanceClient()
+
+    async def run_fetch():
+        return await client.fetch_funding_rates(
+            symbol="BTCUSDT",
+            start="2024-01-12T00:00:00Z",
+            end="2024-01-12T00:00:00Z",
+        )
+
+    rows = anyio.run(run_fetch)
+
+    assert [row["funding_time"] for row in rows] == ["2024-01-12T00:00:00Z"]
+
+
+def test_fetch_funding_rates_requests_enough_end_time_for_exchange_drift() -> None:
+    client = OffsetFundingWindowBinanceClient()
+
+    async def run_fetch():
+        return await client.fetch_funding_rates(
+            symbol="BTCUSDT",
+            start="2024-01-12T00:00:00Z",
+            end="2024-01-12T00:00:00Z",
+        )
+
+    rows = anyio.run(run_fetch)
+
+    assert [row["funding_time"] for row in rows] == ["2024-01-12T00:00:00Z"]

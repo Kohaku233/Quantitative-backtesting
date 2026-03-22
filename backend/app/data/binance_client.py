@@ -3,7 +3,13 @@ from typing import Any
 
 import httpx
 
-from backend.app.data.coverage import FUNDING_INTERVAL, format_timestamp, parse_timestamp, timeframe_delta
+from backend.app.data.coverage import (
+    FUNDING_INTERVAL,
+    floor_to_step,
+    format_timestamp,
+    parse_timestamp,
+    timeframe_delta,
+)
 
 
 class BinancePublicClient:
@@ -101,7 +107,7 @@ class BinancePublicClient:
                 {
                     "symbol": symbol,
                     "startTime": int(cursor.timestamp() * 1000),
-                    "endTime": int(end_at.timestamp() * 1000),
+                    "endTime": int((end_at + FUNDING_INTERVAL).timestamp() * 1000) - 1,
                     "limit": self.funding_limit,
                 },
             )
@@ -109,7 +115,10 @@ class BinancePublicClient:
                 break
 
             for row in payload:
-                funding_time = parse_timestamp_from_ms(int(row["fundingTime"]))
+                funding_time = floor_to_step(
+                    parse_timestamp_from_ms(int(row["fundingTime"])),
+                    FUNDING_INTERVAL,
+                )
                 if funding_time < start_at or funding_time > end_at:
                     continue
                 rows.append(
@@ -123,7 +132,10 @@ class BinancePublicClient:
             if len(payload) < self.funding_limit:
                 break
 
-            next_cursor = parse_timestamp_from_ms(int(payload[-1]["fundingTime"])) + FUNDING_INTERVAL
+            next_cursor = floor_to_step(
+                parse_timestamp_from_ms(int(payload[-1]["fundingTime"])),
+                FUNDING_INTERVAL,
+            ) + FUNDING_INTERVAL
             if next_cursor <= cursor:
                 break
             cursor = next_cursor
