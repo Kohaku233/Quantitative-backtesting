@@ -1,0 +1,14 @@
+.worktrees/
+.venv/
+__pycache__/
+.pytest_cache/
+.coverage
+*.pyc
+*.pyo
+*.pyd
+*.duckdb
+*.db
+node_modules/
+frontend/node_modules/
+dist/
+frontend/dist/
