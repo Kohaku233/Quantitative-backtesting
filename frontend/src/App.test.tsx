@@ -288,11 +288,11 @@ test("blocks run until coverage is complete or sync succeeds", async () => {
 
   render(<App />);
 
-  expect(await screen.findByText(/checking local data/i)).toBeInTheDocument();
+  expect(await screen.findByText(/checking local data:/i)).toBeInTheDocument();
 
   coverageGate.resolve(incompleteCoverage);
 
-  expect(await screen.findByText(/data sync required/i)).toBeInTheDocument();
+  expect(await screen.findByText(/data sync required:/i)).toBeInTheDocument();
   expect(screen.getByRole("button", { name: /run backtest/i })).toBeDisabled();
 });
 
@@ -315,8 +315,7 @@ test("renders sync and run error states from backend contracts", async () => {
 
   fireEvent.click(await screen.findByRole("button", { name: /sync missing market data/i }));
 
-  expect(await screen.findByText(/syncing missing market data/i)).toBeInTheDocument();
-  expect(await screen.findByText(/unable to sync market data/i)).toBeInTheDocument();
+  expect(await screen.findByText(/unable to sync market data:/i)).toBeInTheDocument();
 
   server.use(
     http.post("/api/data/sync", () => HttpResponse.json(syncCompletedResponse)),
@@ -325,7 +324,7 @@ test("renders sync and run error states from backend contracts", async () => {
   fireEvent.click(screen.getByRole("button", { name: /sync missing market data/i }));
   fireEvent.click(await screen.findByRole("button", { name: /run backtest/i }));
 
-  expect(await screen.findByText(/data coverage is incomplete/i)).toBeInTheDocument();
+  expect(await screen.findByText(/data coverage is incomplete:/i)).toBeInTheDocument();
 });
 
 
@@ -344,7 +343,7 @@ test("stops after no_data_available without calling the run endpoint", async () 
 
   fireEvent.click(await screen.findByRole("button", { name: /sync missing market data/i }));
 
-  expect(await screen.findByText(/requested range has no exchange data/i)).toBeInTheDocument();
+  expect(await screen.findByText(/requested range has no exchange data:/i)).toBeInTheDocument();
   await waitFor(() => expect(runSpy).not.toHaveBeenCalled());
 });
 
@@ -362,9 +361,9 @@ test("renders metrics and trades after a successful run", async () => {
 
   expect(await screen.findByText(/max drawdown/i)).toBeInTheDocument();
   expect(screen.getByRole("table", { name: /trade list/i })).toBeInTheDocument();
-  expect(screen.getByText(/monthly returns/i)).toBeInTheDocument();
-  expect(screen.getByText(/entry_long/i)).toBeInTheDocument();
-  expect(screen.getByText(/rendering result/i)).toBeInTheDocument();
+  expect(screen.getByRole("tab", { name: /monthly returns/i })).toBeInTheDocument();
+  expect(screen.queryByText(/evidence trail/i)).not.toBeInTheDocument();
+  expect(screen.getByText(/result ready/i)).toBeInTheDocument();
 });
 
 
@@ -379,10 +378,10 @@ test("clears stale results when the active research configuration changes", asyn
   fireEvent.click(await screen.findByRole("button", { name: /sync missing market data/i }));
   fireEvent.click(await screen.findByRole("button", { name: /run backtest/i }));
 
-  expect(await screen.findByText(/entry_long/i)).toBeInTheDocument();
+  expect(await screen.findByRole("table", { name: /trade list/i })).toBeInTheDocument();
 
   fireEvent.change(screen.getByLabelText(/timeframe/i), { target: { value: "4h" } });
 
-  expect(await screen.findByText(/checking local data/i)).toBeInTheDocument();
-  await waitFor(() => expect(screen.queryByText(/entry_long/i)).not.toBeInTheDocument());
+  expect(await screen.findByText(/data sync required:/i)).toBeInTheDocument();
+  await waitFor(() => expect(screen.queryByRole("table", { name: /trade list/i })).not.toBeInTheDocument());
 });
