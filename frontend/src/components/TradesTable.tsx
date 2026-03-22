@@ -23,6 +23,8 @@ export type TradeRow = {
 type TradesTableProps = {
   trades: TradeRow[];
   className?: string;
+  selectedTradeId?: number | null;
+  onSelectTrade?: (tradeId: number) => void;
 };
 
 function formatDuration(seconds: number) {
@@ -50,12 +52,20 @@ function formatSide(side: string) {
   return side.replaceAll("_", " ");
 }
 
-export function TradesTable({ trades, className }: TradesTableProps) {
+export function TradesTable({
+  trades,
+  className,
+  selectedTradeId = null,
+  onSelectTrade,
+}: TradesTableProps) {
   return (
     <section className={className ? `trades-table-shell ${className}` : "trades-table-shell"}>
       <div className="section-heading">
         <p className="eyebrow">Execution Log</p>
         <h3>Trade List</h3>
+        <p className="section-heading__subtle">
+          Select a row to inspect the execution and highlight its chart markers.
+        </p>
       </div>
 
       <div className="table-scroll">
@@ -89,7 +99,13 @@ export function TradesTable({ trades, className }: TradesTableProps) {
               </tr>
             ) : (
               trades.map((trade) => (
-                <tr key={trade.trade_id} data-tone={trade.net_pnl >= 0 ? "positive" : "negative"}>
+                <tr
+                  key={trade.trade_id}
+                  data-tone={trade.net_pnl >= 0 ? "positive" : "negative"}
+                  data-active={selectedTradeId === trade.trade_id}
+                  className={selectedTradeId === trade.trade_id ? "trades-table__row trades-table__row--active" : "trades-table__row"}
+                  onClick={() => onSelectTrade?.(trade.trade_id)}
+                >
                   <th scope="row">#{trade.trade_id}</th>
                   <td>{formatSide(trade.side)}</td>
                   <td>{formatTimestamp(trade.entry_time)}</td>

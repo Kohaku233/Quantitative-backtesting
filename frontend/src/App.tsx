@@ -1,16 +1,26 @@
+import "@fontsource/ibm-plex-sans/400.css";
+import "@fontsource/ibm-plex-sans/500.css";
+import "@fontsource/ibm-plex-sans/600.css";
+import "@fontsource/ibm-plex-sans/700.css";
+import "@fontsource/ibm-plex-mono/400.css";
+import "@fontsource/ibm-plex-mono/500.css";
+
 import { startTransition, useDeferredValue, useEffect, useMemo, useState } from "react";
 
+import { CommandBar } from "./components/CommandBar";
+import { ConfigRail } from "./components/ConfigRail";
 import { DataCoveragePanel } from "./components/DataCoveragePanel";
 import { DrawdownChart } from "./components/DrawdownChart";
 import { EmptyState } from "./components/EmptyState";
 import { EquityChart } from "./components/EquityChart";
 import { KlineChart } from "./components/KlineChart";
-import { MetricsGrid, type MetricItem } from "./components/MetricsGrid";
 import { MonthlyReturnsTable } from "./components/MonthlyReturnsTable";
-import { StatusBanner } from "./components/StatusBanner";
+import { ResultDock } from "./components/ResultDock";
+import { SummaryRail } from "./components/SummaryRail";
 import { StrategyPanel } from "./components/StrategyPanel";
-import { TopBar } from "./components/TopBar";
-import { TradesTable } from "./components/TradesTable";
+import { TradeInspector } from "./components/TradeInspector";
+import { TradesTable, type TradeRow } from "./components/TradesTable";
+import { WorkspaceShell } from "./components/WorkspaceShell";
 import { formatNumber, formatPercent, formatTimestamp } from "./lib/formatters";
 import { useCoverage } from "./hooks/useCoverage";
 import { useRunBacktest } from "./hooks/useRunBacktest";
@@ -21,6 +31,7 @@ import type {
   JsonRecord,
   StrategyParameterField,
 } from "./types/contracts";
+import type { MetricItem } from "./components/MetricsGrid";
 import "./styles.css";
 
 type Theme = "light" | "dark";
@@ -199,6 +210,123 @@ function getCoverageFromDetails(details: JsonRecord | undefined): CoverageStatus
   return isCoverageStatusResponse(details.coverage) ? details.coverage : null;
 }
 
+function buildRunSummary(result: BacktestRunResponse | null, phaseTitle: string, phaseDescription: string) {
+  if (!result) {
+    return (
+      <p className="summary-copy">
+        <strong>{phaseTitle}</strong>
+        <span>{phaseDescription}</span>
+      </p>
+    );
+  }
+
+  return (
+    <div className="run-summary">
+      <div className="run-summary__headline">
+        <strong>{result.strategy.name}</strong>
+        <span className={`run-pill run-pill--${result.run.status}`}>{result.run.status}</span>
+      </div>
+
+      <dl className="run-summary__grid">
+        <div>
+          <dt>Range</dt>
+          <dd>{formatTimestamp(result.run.effective_start)} to {formatTimestamp(result.run.actual_end)}</dd>
+        </div>
+        <div>
+          <dt>Trades</dt>
+          <dd>{result.metrics.total_trades}</dd>
+        </div>
+        <div>
+          <dt>Leverage</dt>
+          <dd>{formatNumber(result.settings.leverage, 1)}x</dd>
+        </div>
+        <div>
+          <dt>Costs</dt>
+          <dd>
+            {formatNumber(result.settings.fee_bps, 1)} bps fee / {formatNumber(result.settings.slippage_bps, 1)} bps slip
+          </dd>
+        </div>
+      </dl>
+    </div>
+  );
+}
+
+function buildFundingTable(trades: TradeRow[]) {
+  return (
+    <div className="table-scroll">
+      <table className="returns-table" aria-label="Funding summary">
+        <thead>
+          <tr>
+            <th scope="col">Trade</th>
+            <th scope="col">Side</th>
+            <th scope="col">Funding</th>
+            <th scope="col">Fees</th>
+            <th scope="col">Net PnL</th>
+          </tr>
+        </thead>
+        <tbody>
+          {trades.length === 0 ? (
+            <tr>
+              <td colSpan={5} className="table-empty">No funding activity is available for this run.</td>
+            </tr>
+          ) : (
+            trades.map((trade) => (
+              <tr key={`funding-${trade.trade_id}`}>
+                <th scope="row">#{trade.trade_id}</th>
+                <td>{trade.side}</td>
+                <td>{formatNumber(trade.funding_pnl, 2)}</td>
+                <td>{formatNumber(trade.fees, 2)}</td>
+                <td className={trade.net_pnl >= 0 ? "table-value--positive" : "table-value--negative"}>
+                  {formatNumber(trade.net_pnl, 2)}
+                </td>
+              </tr>
+            ))
+          )}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function buildPositionsTable(trades: TradeRow[]) {
+  return (
+    <div className="table-scroll">
+      <table className="returns-table" aria-label="Position summary">
+        <thead>
+          <tr>
+            <th scope="col">Trade</th>
+            <th scope="col">Side</th>
+            <th scope="col">Qty</th>
+            <th scope="col">Margin</th>
+            <th scope="col">Notional</th>
+            <th scope="col">Return</th>
+          </tr>
+        </thead>
+        <tbody>
+          {trades.length === 0 ? (
+            <tr>
+              <td colSpan={6} className="table-empty">No position history is available for this run.</td>
+            </tr>
+          ) : (
+            trades.map((trade) => (
+              <tr key={`position-${trade.trade_id}`}>
+                <th scope="row">#{trade.trade_id}</th>
+                <td>{trade.side}</td>
+                <td>{formatNumber(trade.quantity, 6)}</td>
+                <td>{formatNumber(trade.allocated_margin_at_entry, 2)}</td>
+                <td>{formatNumber(trade.notional, 2)}</td>
+                <td className={trade.return_pct_on_margin >= 0 ? "table-value--positive" : "table-value--negative"}>
+                  {formatPercent(trade.return_pct_on_margin, 2)}
+                </td>
+              </tr>
+            ))
+          )}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 export default function App() {
   const defaultRange = useMemo(() => getDefaultRange(), []);
   const [theme, setTheme] = useState<Theme>("dark");
@@ -213,6 +341,7 @@ export default function App() {
   const [positionSizePct, setPositionSizePct] = useState(DEFAULT_FORM.positionSizePct);
   const [parameterValues, setParameterValues] = useState<Record<string, ParameterValue>>({});
   const [lastRunSignature, setLastRunSignature] = useState<BacktestSignature | null>(null);
+  const [selectedTradeId, setSelectedTradeId] = useState<number | null>(null);
 
   const {
     strategies,
@@ -311,21 +440,34 @@ export default function App() {
     return result;
   }, [
     coverageRequest,
+    currentParamsKey,
+    endValue,
     feeBps,
     initialCapital,
     leverage,
     positionSizePct,
-    currentParamsKey,
     result,
     selectedStrategy,
-    startValue,
     slippageBps,
+    startValue,
     timeframe,
-    endValue,
     lastRunSignature,
   ]);
   const deferredResult = useDeferredValue(activeResult);
   const visibleResult = activeResult === null ? null : deferredResult;
+
+  useEffect(() => {
+    if (!visibleResult || visibleResult.trades.length === 0) {
+      setSelectedTradeId(null);
+      return;
+    }
+
+    setSelectedTradeId((current) =>
+      current && visibleResult.trades.some((trade) => trade.trade_id === current)
+        ? current
+        : visibleResult.trades[0].trade_id,
+    );
+  }, [visibleResult]);
 
   const effectiveCoverage =
     getCoverageFromDetails(runError?.details) ?? visibleResult?.coverage ?? coverage;
@@ -408,8 +550,8 @@ export default function App() {
     if (visibleResult) {
       return {
         tone: "success" as const,
-        title: "Rendering result",
-        description: `${visibleResult.strategy.name} completed ${visibleResult.metrics.total_trades} trades between ${formatTimestamp(visibleResult.run.effective_start)} and ${formatTimestamp(visibleResult.run.actual_end)}.`,
+        title: "Result ready",
+        description: `${visibleResult.strategy.name} finished ${visibleResult.metrics.total_trades} trades over the selected research range.`,
       };
     }
 
@@ -437,7 +579,6 @@ export default function App() {
   }, [
     coverage,
     coverageError,
-    deferredResult,
     isCoverageLoading,
     isRunning,
     isStrategiesLoading,
@@ -450,6 +591,10 @@ export default function App() {
   ]);
 
   const metrics = useMemo(() => (visibleResult ? getMetricItems(visibleResult) : []), [visibleResult]);
+  const selectedTrade = useMemo(
+    () => visibleResult?.trades.find((trade) => trade.trade_id === selectedTradeId) ?? null,
+    [selectedTradeId, visibleResult],
+  );
 
   const handleThemeToggle = () => {
     setTheme((current) => (current === "dark" ? "light" : "dark"));
@@ -514,131 +659,148 @@ export default function App() {
     }
   };
 
+  const rangeLabel =
+    startValue && endValue
+      ? `${formatTimestamp(toIsoString(startValue))} -> ${formatTimestamp(toIsoString(endValue))}`
+      : "Waiting for range";
+
   return (
-    <main className="app-shell">
-      <div className="app-frame">
-        <TopBar
+    <main className="app-shell app-shell--terminal">
+      <div className="app-frame app-frame--terminal">
+        <CommandBar
           theme={theme}
           onToggleTheme={handleThemeToggle}
           strategyName={selectedStrategy?.name ?? "Strategy pending"}
           symbol={FIXED_SYMBOL}
-          coverageComplete={Boolean(effectiveCoverage?.complete)}
+          timeframeLabel={timeframe}
+          rangeLabel={rangeLabel}
+          coverageReady={Boolean(effectiveCoverage?.complete)}
+          statusText={`${phaseBanner.title}: ${phaseBanner.description}`}
+          onSync={showSyncButton ? handleSync : undefined}
+          onRun={handleRun}
+          syncDisabled={isSyncing}
+          runDisabled={!canRun}
+          syncLabel={isSyncing ? "Syncing missing market data" : "Sync missing market data"}
+          runLabel={isRunning ? "Running..." : "Run Backtest"}
         />
 
-        <div className="workspace-grid">
-          <aside className="sidebar-stack">
-            <StrategyPanel
-              strategies={strategies}
-              selectedStrategy={selectedStrategy}
-              selectedStrategyId={selectedStrategyId}
-              onSelectStrategy={handleStrategyChange}
-              timeframe={timeframe}
-              onTimeframeChange={(value) => setTimeframe(value)}
-              startValue={startValue}
-              endValue={endValue}
-              onStartChange={setStartValue}
-              onEndChange={setEndValue}
-              initialCapital={initialCapital}
-              onInitialCapitalChange={setInitialCapital}
-              leverage={leverage}
-              onLeverageChange={setLeverage}
-              feeBps={feeBps}
-              onFeeBpsChange={setFeeBps}
-              slippageBps={slippageBps}
-              onSlippageBpsChange={setSlippageBps}
-              positionSizePct={positionSizePct}
-              onPositionSizePctChange={setPositionSizePct}
-              parameterValues={parameterValues}
-              onParameterChange={handleParameterChange}
-              onSync={handleSync}
-              onRun={handleRun}
-              canRun={canRun}
-              isSyncing={isSyncing}
-              showRunButton={!isSyncing}
-              showSyncButton={showSyncButton}
-              discoveryWarnings={discoveryWarnings}
-            />
-
-            <DataCoveragePanel
-              coverage={effectiveCoverage}
-              isLoading={!selectedStrategy || isCoverageLoading}
-              syncStatus={syncResult?.status ?? null}
-            />
-          </aside>
-
-          <section className="results-stack">
-            <StatusBanner
-              tone={phaseBanner.tone}
-              title={phaseBanner.title}
-              description={phaseBanner.description}
-            />
-
-            {!visibleResult ? (
-              <EmptyState
-                eyebrow="Research Terminal"
-                title="No backtest result yet"
-                description="Sync the requested data window, then run the selected strategy to inspect risk, returns, execution, and market context in one place."
+        <WorkspaceShell
+          config={
+            <ConfigRail>
+              <StrategyPanel
+                strategies={strategies}
+                selectedStrategy={selectedStrategy}
+                selectedStrategyId={selectedStrategyId}
+                onSelectStrategy={handleStrategyChange}
+                timeframe={timeframe}
+                onTimeframeChange={(value) => setTimeframe(value)}
+                startValue={startValue}
+                endValue={endValue}
+                onStartChange={setStartValue}
+                onEndChange={setEndValue}
+                initialCapital={initialCapital}
+                onInitialCapitalChange={setInitialCapital}
+                leverage={leverage}
+                onLeverageChange={setLeverage}
+                feeBps={feeBps}
+                onFeeBpsChange={setFeeBps}
+                slippageBps={slippageBps}
+                onSlippageBpsChange={setSlippageBps}
+                positionSizePct={positionSizePct}
+                onPositionSizePctChange={setPositionSizePct}
+                parameterValues={parameterValues}
+                onParameterChange={handleParameterChange}
+                onSync={handleSync}
+                onRun={handleRun}
+                canRun={canRun}
+                isSyncing={isSyncing}
+                showRunButton={false}
+                showSyncButton={false}
+                discoveryWarnings={discoveryWarnings}
+                showHeader={false}
+                showActions={false}
+              />
+            </ConfigRail>
+          }
+          chart={
+            visibleResult ? (
+              <KlineChart
+                data={visibleResult.series.market_bars}
+                markers={visibleResult.markers}
+                activeTradeId={selectedTradeId}
+                title="BTCUSDT perpetual"
+                subtitle={`${visibleResult.run.timeframe} candles with execution markers`}
+                theme={theme}
+                height={520}
+                className="chart-panel chart-panel--main"
               />
             ) : (
-              <>
-                <MetricsGrid items={metrics} />
-
-                <div className="results-grid">
-                  <KlineChart
-                    data={visibleResult.series.market_bars}
-                    markers={visibleResult.markers}
-                    title="BTCUSDT perpetual"
-                    subtitle={`${visibleResult.run.timeframe} candles with execution markers`}
-                    theme={theme}
+              <EmptyState
+                className="empty-state empty-state--chart"
+                eyebrow="Chart Workspace"
+                title="No market context yet"
+                description="Sync the selected window and run a strategy to project entries, exits, and holding behavior onto the price chart."
+              />
+            )
+          }
+          dock={
+            visibleResult ? (
+              <ResultDock
+                className="result-dock"
+                trades={(
+                  <TradesTable
+                    trades={visibleResult.trades}
+                    selectedTradeId={selectedTradeId}
+                    onSelectTrade={setSelectedTradeId}
                   />
-
-                  <section className="signal-feed panel-surface" aria-label="Signal markers">
-                    <div className="section-heading">
-                      <p className="eyebrow">Evidence Trail</p>
-                      <h3>Execution markers</h3>
-                      <p className="section-heading__subtle">
-                        Raw signal actions emitted by the strategy.
-                      </p>
-                    </div>
-
-                    <div className="signal-feed__list">
-                      {visibleResult.markers.length === 0 ? (
-                        <p className="signal-feed__empty">No marker annotations were produced for this run.</p>
-                      ) : (
-                        visibleResult.markers.map((marker) => (
-                          <article key={`${marker.trade_id}-${marker.time}`} className="signal-chip">
-                            <strong>{marker.action}</strong>
-                            <span>Trade #{marker.trade_id}</span>
-                            <span>{formatTimestamp(marker.time)}</span>
-                            <span>{formatNumber(marker.price, 2)}</span>
-                          </article>
-                        ))
-                      )}
-                    </div>
-                  </section>
-                </div>
-
-                <div className="secondary-grid">
+                )}
+                positions={buildPositionsTable(visibleResult.trades)}
+                funding={buildFundingTable(visibleResult.trades)}
+                equity={(
                   <EquityChart
                     data={visibleResult.series.equity_curve}
                     subtitle={`${visibleResult.run.status} run with ${visibleResult.metrics.total_trades} closed trades`}
                     theme={theme}
+                    className="chart-panel chart-panel--dock"
                   />
+                )}
+                drawdown={(
                   <DrawdownChart
                     data={visibleResult.series.drawdown_curve}
                     subtitle="Peak-to-trough equity stress across the selected range"
                     theme={theme}
+                    className="chart-panel chart-panel--dock"
                   />
+                )}
+                monthlyReturns={<MonthlyReturnsTable monthlyReturns={visibleResult.monthly_returns} />}
+                coverage={(
+                  <DataCoveragePanel
+                    coverage={effectiveCoverage}
+                    isLoading={!selectedStrategy || isCoverageLoading}
+                    syncStatus={syncResult?.status ?? null}
+                  />
+                )}
+              />
+            ) : (
+              <section className="dock-placeholder panel-surface" aria-label="Result dock placeholder">
+                <div className="section-heading">
+                  <p className="eyebrow">Result Dock</p>
+                  <h3>Trades, funding, and curve analysis will appear here</h3>
+                  <p className="section-heading__subtle">
+                    The redesigned workspace keeps trade history below the chart, not in a separate evidence panel.
+                  </p>
                 </div>
-
-                <div className="secondary-grid secondary-grid--tables">
-                  <TradesTable trades={visibleResult.trades} />
-                  <MonthlyReturnsTable monthlyReturns={visibleResult.monthly_returns} />
-                </div>
-              </>
-            )}
-          </section>
-        </div>
+              </section>
+            )
+          }
+          summary={
+            <SummaryRail
+              metrics={metrics}
+              runSummary={buildRunSummary(visibleResult, phaseBanner.title, phaseBanner.description)}
+              tradeInspector={<TradeInspector trade={selectedTrade} />}
+            />
+          }
+        />
       </div>
     </main>
   );

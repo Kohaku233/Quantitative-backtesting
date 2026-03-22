@@ -35,6 +35,7 @@ type ChartTheme = "light" | "dark";
 type KlineChartProps = {
   data: KlinePoint[];
   markers?: KlineMarker[];
+  activeTradeId?: number | null;
   title?: string;
   subtitle?: string;
   theme?: ChartTheme;
@@ -61,16 +62,23 @@ function resolveTheme(theme?: ChartTheme): ChartTheme {
   return "light";
 }
 
-function mapMarker(marker: KlineMarker): SeriesMarker<UTCTimestamp> {
+function mapMarker(marker: KlineMarker, activeTradeId: number | null): SeriesMarker<UTCTimestamp> {
   const action = marker.action.toLowerCase();
   const isEntry = action.includes("entry");
   const isExit = action.includes("exit");
+  const isActive = activeTradeId === marker.trade_id;
 
   return {
     time: toChartTimestamp(marker.time),
     position: isEntry ? "belowBar" : "aboveBar",
     shape: isEntry ? "arrowUp" : isExit ? "arrowDown" : "circle",
-    color: isEntry ? "#2f855a" : isExit ? "#c53030" : "#4a5568",
+    color: isActive
+      ? "#2563eb"
+      : isEntry
+        ? "#2f855a"
+        : isExit
+          ? "#c53030"
+          : "#4a5568",
     text: `#${marker.trade_id} ${marker.action.replaceAll("_", " ")}`,
     price: marker.price,
     id: String(marker.trade_id),
@@ -143,6 +151,7 @@ function ChartFallback({
 export function KlineChart({
   data,
   markers = [],
+  activeTradeId = null,
   title = "BTC / USDT",
   subtitle,
   theme,
@@ -195,8 +204,8 @@ export function KlineChart({
       localization: {
         dateFormat: "MMM dd",
       },
-      handleScroll: false,
-      handleScale: false,
+      handleScroll: true,
+      handleScale: true,
     });
 
     const series = chart.addSeries(CandlestickSeries, {
@@ -219,11 +228,31 @@ export function KlineChart({
       })),
     );
     markersRef.current?.detach();
-    markersRef.current = createSeriesMarkers(series, markers.map(mapMarker), {
+    markersRef.current = createSeriesMarkers(series, markers.map((marker) => mapMarker(marker, activeTradeId)), {
       autoScale: true,
       zOrder: "top",
     });
-    chart.timeScale().fitContent();
+
+    if (activeTradeId !== null) {
+      const activeMarkers = markers.filter((marker) => marker.trade_id === activeTradeId);
+      const stepSeconds =
+        data.length > 1
+          ? Math.max(1, toChartTimestamp(data[1].time) - toChartTimestamp(data[0].time))
+          : (3600 as UTCTimestamp);
+
+      if (activeMarkers.length > 0) {
+        const first = toChartTimestamp(activeMarkers[0].time);
+        const last = toChartTimestamp(activeMarkers[activeMarkers.length - 1].time);
+        chart.timeScale().setVisibleRange({
+          from: (first - stepSeconds * 4) as UTCTimestamp,
+          to: (last + stepSeconds * 4) as UTCTimestamp,
+        });
+      } else {
+        chart.timeScale().fitContent();
+      }
+    } else {
+      chart.timeScale().fitContent();
+    }
 
     const resize = () => {
       chart.applyOptions({
@@ -245,7 +274,7 @@ export function KlineChart({
       chartRef.current = null;
       seriesRef.current = null;
     };
-  }, [data, height, markers, resolvedTheme, shouldRenderChart]);
+  }, [activeTradeId, data, height, markers, resolvedTheme, shouldRenderChart]);
 
   if (!shouldRenderChart) {
     return (

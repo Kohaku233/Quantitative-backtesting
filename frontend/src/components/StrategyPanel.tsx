@@ -38,6 +38,8 @@ type StrategyPanelProps = {
   showRunButton: boolean;
   showSyncButton: boolean;
   discoveryWarnings: DiscoveryWarning[];
+  showHeader?: boolean;
+  showActions?: boolean;
 };
 
 function parseNumber(value: string) {
@@ -174,17 +176,21 @@ export function StrategyPanel({
   showRunButton,
   showSyncButton,
   discoveryWarnings,
+  showHeader = true,
+  showActions = true,
 }: StrategyPanelProps) {
   return (
     <section className="strategy-panel panel-surface">
-      <div className="section-heading">
-        <p className="eyebrow">Strategy Setup</p>
-        <h2>Research controls</h2>
-        <p className="section-heading__subtle">
-          Configure the plugin, historical window, and execution assumptions
-          before a run.
-        </p>
-      </div>
+      {showHeader ? (
+        <div className="section-heading">
+          <p className="eyebrow">Strategy Setup</p>
+          <h2>Research controls</h2>
+          <p className="section-heading__subtle">
+            Configure the plugin, historical window, and execution assumptions
+            before a run.
+          </p>
+        </div>
+      ) : null}
 
       <div className="field">
         <label className="field__label" htmlFor="strategy-select">
@@ -359,18 +365,20 @@ export function StrategyPanel({
         </div>
       ) : null}
 
-      <div className="panel-actions">
-        {showSyncButton ? (
-          <button type="button" className="button button--secondary" onClick={onSync} disabled={isSyncing}>
-            Sync missing market data
-          </button>
-        ) : null}
-        {showRunButton ? (
-          <button type="button" className="button button--primary" onClick={onRun} disabled={!canRun}>
-            Run backtest
-          </button>
-        ) : null}
-      </div>
+      {showActions ? (
+        <div className="panel-actions">
+          {showSyncButton ? (
+            <button type="button" className="button button--secondary" onClick={onSync} disabled={isSyncing}>
+              Sync missing market data
+            </button>
+          ) : null}
+          {showRunButton ? (
+            <button type="button" className="button button--primary" onClick={onRun} disabled={!canRun}>
+              Run backtest
+            </button>
+          ) : null}
+        </div>
+      ) : null}
     </section>
   );
 }
