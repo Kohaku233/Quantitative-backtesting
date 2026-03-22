@@ -106,6 +106,33 @@ class DuplicateSmaCrossStrategy(BaseStrategyPlugin):
 """
 
 
+INVALID_CONTRACT_PLUGIN = """
+from typing import Any, Mapping
+
+import pandas as pd
+
+from backend.app.strategies.base import BaseStrategyPlugin
+
+
+class InvalidContractStrategy(BaseStrategyPlugin):
+    id = "invalid_contract"
+    name = "Invalid Contract"
+    description = "Plugin with the wrong method contract."
+    supported_timeframes = ("1h",)
+    required_lookback_bars = 10
+    parameter_schema = []
+
+    def validate_params(self, params: Mapping[str, Any]) -> dict[str, Any]:
+        return {}
+
+    def compute_indicators(self, df: pd.DataFrame, params: Mapping[str, Any]) -> pd.DataFrame:
+        return pd.DataFrame(index=df.index)
+
+    def generate_signals(self, df: pd.DataFrame, indicators: pd.DataFrame, params: Mapping[str, Any]) -> pd.Series:
+        return pd.Series(0, index=df.index, dtype="int8")
+"""
+
+
 def _write_plugin(path: Path, content: str) -> None:
     path.write_text(dedent(content).strip() + "\n", encoding="utf-8")
 
@@ -114,6 +141,7 @@ def test_discovery_skips_invalid_plugins_and_returns_warnings(tmp_path: Path) ->
     _write_plugin(tmp_path / "sma_cross.py", VALID_PLUGIN)
     _write_plugin(tmp_path / "broken_plugin.py", BROKEN_PLUGIN)
     _write_plugin(tmp_path / "duplicate_sma_cross.py", DUPLICATE_PLUGIN)
+    _write_plugin(tmp_path / "invalid_contract.py", INVALID_CONTRACT_PLUGIN)
 
     strategies, warnings = discover_strategies(tmp_path)
 
@@ -130,4 +158,8 @@ def test_discovery_skips_invalid_plugins_and_returns_warnings(tmp_path: Path) ->
     assert {
         "file": "duplicate_sma_cross.py",
         "reason": "duplicate id 'sma_cross'",
+    } in warning_dicts
+    assert {
+        "file": "invalid_contract.py",
+        "reason": "TypeError: validate_params must be declared as a @classmethod",
     } in warning_dicts

@@ -37,6 +37,23 @@ def _validate_plugin_class(plugin_class: type[BaseStrategyPlugin]) -> None:
     if not isinstance(plugin_class.parameter_schema, list):
         raise TypeError("parameter_schema must be a list[dict[str, Any]]")
 
+    expected_methods = {
+        "validate_params": ("cls", "params"),
+        "compute_indicators": ("cls", "df", "params"),
+        "generate_signals": ("cls", "df", "indicators", "params"),
+    }
+
+    for method_name, expected_parameters in expected_methods.items():
+        descriptor = inspect.getattr_static(plugin_class, method_name, None)
+        if not isinstance(descriptor, classmethod):
+            raise TypeError(f"{method_name} must be declared as a @classmethod")
+
+        actual_parameters = tuple(inspect.signature(descriptor.__func__).parameters)
+        if actual_parameters != expected_parameters:
+            raise TypeError(
+                f"{method_name} must have signature ({', '.join(expected_parameters)})"
+            )
+
 
 def discover_strategies(
     directory: Path,
