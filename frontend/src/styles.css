@@ -1,0 +1,60 @@
+:root {
+  color: #f4efe4;
+  background:
+    radial-gradient(circle at top left, rgba(244, 164, 96, 0.2), transparent 45%),
+    linear-gradient(160deg, #10181f 0%, #152430 45%, #0d1318 100%);
+  font-family: "Segoe UI", "Helvetica Neue", sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+}
+
+#root {
+  min-height: 100vh;
+}
+
+.app-shell {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 32px;
+}
+
+.hero-panel {
+  width: min(720px, 100%);
+  padding: 40px;
+  border: 1px solid rgba(244, 239, 228, 0.14);
+  border-radius: 28px;
+  background: rgba(9, 15, 20, 0.72);
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.28);
+  backdrop-filter: blur(14px);
+}
+
+.eyebrow {
+  margin: 0 0 12px;
+  color: #e0a66a;
+  font-size: 0.85rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+
+.hero-panel h1 {
+  margin: 0;
+  color: #fbf8f2;
+  font-size: clamp(2rem, 5vw, 3.8rem);
+  line-height: 1.02;
+}
+
+.hero-copy {
+  margin: 18px 0 0;
+  max-width: 42rem;
+  color: rgba(244, 239, 228, 0.78);
+  font-size: 1.05rem;
+  line-height: 1.7;
+}
